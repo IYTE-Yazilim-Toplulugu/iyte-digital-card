@@ -1,11 +1,9 @@
-import { Image, StyleSheet, Platform, Button } from 'react-native';
+import { Image, StyleSheet, Platform } from 'react-native';
 
 import { HelloWave } from '@/components/HelloWave';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { View } from 'react-native-reanimated/lib/typescript/Animated';
-import { Link } from 'expo-router';
 
 export default function HomeScreen() {
   return (
@@ -48,19 +46,11 @@ export default function HomeScreen() {
           <ThemedText type="defaultSemiBold">app-example</ThemedText>.
         </ThemedText>
       </ThemedView>
-
-      <Link href="/login" style={styles.link}>
-          <ThemedText type="link">Go to home screen!</ThemedText>
-      </Link>
     </ParallaxScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  link: {
-    marginTop: 15,
-    paddingVertical: 15,
-  },
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
