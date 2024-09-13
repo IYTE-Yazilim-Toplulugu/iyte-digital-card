@@ -1,4 +1,5 @@
 {
+  "proxy": "https://yks.iyte.edu.tr",
   "name": "iyte-digital-card",
   "main": "expo-router/entry",
   "version": "1.0.0",
