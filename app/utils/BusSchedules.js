@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     color: '#ffffff', // Beyaz renk metin
   },
   dateString: {
-    fontSize: 16,
+    fontSize: 13,
     marginBottom: 8,
     color: '#ffffff', // Beyaz renk metin
   },
@@ -152,9 +152,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff', // Beyaz arka plan
   },
   scheduleText: {
-    fontSize: 16,
+    fontSize: 13,
     color: '#212529',
-    width: '48%',
+    width: '60%',
     textAlign: 'center',
   },
   errorText: {
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     padding: 9,
   },
   tarifeTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
     marginBottom: 8,
     color: '#212529',
