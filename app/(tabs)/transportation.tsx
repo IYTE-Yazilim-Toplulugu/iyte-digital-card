@@ -44,8 +44,8 @@ const logWithTimestamp = (message: string) => {
 
 const fetchBusLocations = async (busLine: number, retryCount = 0): Promise<BusLocation[]> => {
   const MAX_RETRIES = 3;
-  const RETRY_DELAY = 5000; // 5 saniye bekleme süresi
-  const BETWEEN_ATTEMPTS_DELAY = 2000; // Yeniden deneme arasındaki bekleme süresi (2 saniye)
+  const RETRY_DELAY = 6000; // 5 saniye bekleme süresi
+  const BETWEEN_ATTEMPTS_DELAY = 5000; // Yeniden deneme arasındaki bekleme süresi (2 saniye)
 
   try {
     logWithTimestamp(`Fetching bus locations for line ${busLine}`);
