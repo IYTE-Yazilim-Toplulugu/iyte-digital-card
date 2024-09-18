@@ -1,160 +1,112 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ScrollView, Alert } from 'react-native';
-import { BusLocation } from '../(tabs)/transportation'; // Otobüs konumları türünü içe aktar
-import BusSchedules from '../utils/BusSchedules'; // Hareket saatleri bileşenini içe aktar
-
-// İkonları bir nesne içinde sakla
-const icons: { [key: number]: any } = {
-  883: require('../imagestransportation/icon883.png'),
-  882: require('../imagestransportation/icon882.png'),
-  982: require('../imagestransportation/icon982.png'),
-  981: require('../imagestransportation/icon981.png'),
-  760: require('../imagestransportation/icon760.png'),
-};
+import React, { useMemo, useCallback } from 'react';
+import { View, StyleSheet, TouchableOpacity, FlatList, Image } from 'react-native';
+import BusSchedules from '../utils/BusSchedules';
 
 interface TransportationDrawerProps {
-  onClose: () => void;
-  busLocations?: BusLocation[]; // busLocations isteğe bağlı olabilir
-  onBusIconPress: (busLine: number) => void; // Haritada zoom yapmak için yeni prop
+  busLocations: any[];
+  onBusIconPress: (busLine: number) => void;
+  selectedBusLine: string;
+  onBusLineChange: (busLine: string) => void;
+  onBusStopSelect: (busStop: any) => void; // Yeni prop eklendi
 }
 
-const TransportationDrawer: React.FC<TransportationDrawerProps> = ({ onClose, busLocations = [], onBusIconPress }) => {
+const TransportationDrawer: React.FC<TransportationDrawerProps> = ({
+  busLocations,
+  onBusIconPress,
+  selectedBusLine,
+  onBusLineChange,
+  onBusStopSelect, // Yeni prop eklendi
+}) => {
+  const getBusIcon = useMemo(() => {
+    const icons: Record<number, any> = {
+      882: require('../imagestransportation/icon882.png'),
+      883: require('../imagestransportation/icon883.png'),
+      981: require('../imagestransportation/icon981.png'),
+      982: require('../imagestransportation/icon982.png'),
+      760: require('../imagestransportation/icon760.png'),
+    };
+    const defaultIcon = require('../imagestransportation/default-icon.png');
+    return (busLine: number) => icons[busLine] || defaultIcon;
+  }, []);
 
-  // Yaklaşan otobüsleri filtrele
-  const getApproachingBuses = () => {
-    const now = new Date();
-    return busLocations.filter(bus => {
-      const departureTime = new Date(bus.departureTime); // Örnek olarak, bus.departureTime bir ISO formatında olmalı
-      const timeDiff = departureTime.getTime() - now.getTime();
-      const minutesDiff = timeDiff / (1000 * 60); // Farkı dakikaya çevir
-      return minutesDiff <= 30 && minutesDiff >= 0; // Yaklaşan otobüsler (örneğin, 30 dakika içinde kalkacak)
-    });
-  };
+  const uniqueBusLines = useMemo(() => 
+    Array.from(new Set(busLocations.map(bus => bus.busLine))),
+    [busLocations]
+  );
 
-  // Otobüs hatlarını benzersiz olarak filtrele
-  const uniqueBusLocations = Array.from(new Set(busLocations.map(item => item.busLine)))
-    .map(busLine => busLocations.find(item => item.busLine === busLine))
-    .filter((item): item is BusLocation => item !== undefined);
+  const renderBusIcon = useCallback(({ item }: { item: number }) => (
+    <TouchableOpacity
+      style={styles.busIconContainer}
+      onPress={() => onBusIconPress(item)}
+    >
+      <Image 
+        source={getBusIcon(item)} 
+        style={[
+          styles.busIcon,
+          selectedBusLine === item.toString() && styles.selectedBusIcon
+        ]} 
+      />
+    </TouchableOpacity>
+  ), [getBusIcon, onBusIconPress, selectedBusLine]);
 
-  // Benzersiz otobüs ikonlarını render et
-  const renderBusIcons = () => {
-    return uniqueBusLocations.map((item: BusLocation) => {
-      // HAT_NO'ya göre uygun ikonu seç
-      const icon = icons[item.busLine] || icons[883]; // Varsayılan olarak icon883 kullan
+  const keyExtractor = useCallback((item: number) => item.toString(), []);
 
-      return (
-        <TouchableOpacity 
-          key={item.busLine} // key olarak busLine kullan, çünkü busLine benzersiz
-          style={styles.iconButton} 
-          onPress={() => onBusIconPress(item.busLine)} // Tıklama olayını ilet
-        >
-          <Image
-            source={icon}
-            style={styles.icon}
-            onError={(e) => {
-              console.log('Hata: İkon yüklenirken bir problem oluştu:', e.nativeEvent.error);
-              Alert.alert('İkon Yükleme Hatası', 'İkon yüklenirken bir hata oluştu.');
-            }}
-          />
-        </TouchableOpacity>
-      );
-    });
-  };
-
-  const approachingBuses = getApproachingBuses();
+  const renderContent = useCallback(() => (
+    <>
+      <View style={styles.activeBusesContainer}>
+        <FlatList
+          data={uniqueBusLines}
+          renderItem={renderBusIcon}
+          keyExtractor={keyExtractor}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.busIconsScroll}
+        />
+      </View>
+      <BusSchedules
+        selectedBus={selectedBusLine}
+        onBusLineChange={onBusLineChange}
+        onBusStopSelect={onBusStopSelect} // Yeni prop eklendi
+      />
+    </>
+  ), [uniqueBusLines, renderBusIcon, keyExtractor, selectedBusLine, onBusLineChange, onBusStopSelect]);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Aktif Otobüsler</Text>
-
-      <View style={styles.iconsContainer}>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={true} 
-          contentContainerStyle={styles.iconsScrollView}
-        >
-          {renderBusIcons()}
-        </ScrollView>
-      </View>
-
-      {/* Hareket saatleri bileşenini her zaman göster */}
-      <View style={styles.schedulesContainer}>
-        <BusSchedules busLocations={busLocations} />
-      </View>
-
-      {approachingBuses.length > 0 && (
-        <>
-          <Text style={styles.title}>Yaklaşan Otobüsler</Text>
-          <FlatList
-            data={approachingBuses}
-            renderItem={({ item }: { item: BusLocation }) => (
-              <View style={styles.item}>
-                <Text style={styles.itemText}>Otobüs ID: {item.OtobusId}</Text>
-                <Text style={styles.itemText}>Hattı: {item.busLine}</Text>
-                <Text style={styles.itemText}>Enlem: {item.KoorX}</Text>
-                <Text style={styles.itemText}>Boylam: {item.KoorY}</Text>
-              </View>
-            )}
-            keyExtractor={item => item.OtobusId.toString()}
-          />
-        </>
-      )}
-    </View>
+    <FlatList
+      data={[{ key: 'content' }]}
+      renderItem={() => renderContent()}
+      keyExtractor={(item) => item.key}
+      style={styles.container}
+    />
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
     backgroundColor: '#fff',
   },
-  header: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-    color: '#9a111f',
-    textAlign: 'center',
+  activeBusesContainer: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
-  title: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-    color: '#9a111f',
-    textAlign: 'center',
+  busIconsScroll: {
+    flexGrow: 0,
   },
-  iconsContainer: {
-    flexDirection: 'row',
+  busIconContainer: {
     alignItems: 'center',
+    marginRight: 0,
   },
-  iconsScrollView: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  busIcon: {
+    width: 80,
+    height: 80,
+    opacity: 0.4, // Seçili olmayan ikonları biraz soluk göster
   },
-  iconButton: {
-    marginHorizontal: 2, // Boşlukları azalt
-    marginVertical: 4,
-    padding: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  icon: {
-    width: 70,
-    height: 70,
-    resizeMode: 'contain',
-  },
-  item: {
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#9a111f',
-  },
-  itemText: {
-    fontSize: 14,
-    color: '#333',
-  },
-  schedulesContainer: {
-    marginTop: 16,
+  selectedBusIcon: {
+    opacity: 1, // Seçili ikonu tam opaklıkta göster
+    transform: [{ scale: 1.1 }], // Seçili ikonu biraz büyüt
   },
 });
 
-export default TransportationDrawer;
+export default React.memo(TransportationDrawer);

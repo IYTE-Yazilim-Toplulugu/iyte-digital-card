@@ -1,13 +1,15 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { View, Image, ImageSourcePropType, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Image, ImageSourcePropType, TouchableOpacity, StyleSheet, Modal, FlatList } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, Region } from 'react-native-maps';
 import BottomSheet from '@gorhom/bottom-sheet';
 import TransportationDrawer from '../transportation/transportationdrawer';
 import BusDetailPanel from '../transportation/BusDetailPanel';
 import ComplaintsScreen from '../transportation/ComplaintsScreen';
 import NotificationModal from '../transportation/NotificationModal';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { getBusStops } from '../utils/getBusStops';
+import BusSchedules from '../utils/BusSchedules';
 
 const icons: Record<number, ImageSourcePropType> = {
   882: require('../imagestransportation/icon882.png'),
@@ -15,11 +17,12 @@ const icons: Record<number, ImageSourcePropType> = {
   981: require('../imagestransportation/icon981.png'),
   982: require('../imagestransportation/icon982.png'),
   760: require('../imagestransportation/icon760.png'),
-  default: require('../imagestransportation/default-icon.png'),
 };
 
+const defaultIcon: ImageSourcePropType = require('../imagestransportation/default-icon.png');
+
 const getBusIcon = (busLine: number) => {
-  return icons[busLine] || icons.default;
+  return icons[busLine] || defaultIcon;
 };
 
 export interface BusLocation {
@@ -83,9 +86,20 @@ const fetchBusLocations = async (busLine: number, retryCount = 0): Promise<BusLo
   }
 };
 
+interface BusStop {
+  DURAK_ID: string;
+  DURAK_ADI: string;
+  ENLEM: string;
+  BOYLAM: string;
+}
+
+// MapView tipini genişletelim
+interface ExtendedMapView extends MapView {
+  __lastRegion?: Region;
+}
+
 const Transportation: React.FC = () => {
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
-  const [lastKnownBusLocations, setLastKnownBusLocations] = useState<BusLocation[]>([]);
   const [selectedBus, setSelectedBus] = useState<BusLocation | null>(null);
 
   const [isBusDetailPanelVisible, setBusDetailPanelVisible] = useState(false);
@@ -94,7 +108,11 @@ const Transportation: React.FC = () => {
 
   const busLines = [982, 882, 883, 981, 760];
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const mapRef = useRef<MapView>(null);  // MapView referansı
+  const mapRef = useRef<ExtendedMapView>(null);  // MapView referansı
+  const [busStops, setBusStops] = useState<BusStop[]>([]);
+  const [selectedBusLine, setSelectedBusLine] = useState<string>('883'); // Varsayılan hat
+
+  const [currentBusLineIndex, setCurrentBusLineIndex] = useState(0);
 
   const fetchData = async () => {
     try {
@@ -109,7 +127,6 @@ const Transportation: React.FC = () => {
       }
 
       setBusLocations(initialBusLocations);
-      setLastKnownBusLocations(initialBusLocations);
     } catch (error) {
       logWithTimestamp('Error loading data: ' + error);
     }
@@ -122,36 +139,57 @@ const Transportation: React.FC = () => {
         const filteredLocations = prevLocations.filter((loc) => loc.busLine !== busLine);
         return [...filteredLocations, ...locations];
       });
-      setLastKnownBusLocations((prevLocations) => {
-        const filteredLocations = prevLocations.filter((loc) => loc.busLine !== busLine);
-        return [...filteredLocations, ...locations];
-      });
     } catch (error) {
       logWithTimestamp(`Error updating bus locations for line ${busLine}: ${error}`);
-      setBusLocations((prevLocations) => {
-        const existingLocations = prevLocations.filter((loc) => loc.busLine === busLine);
-        return [...existingLocations, ...lastKnownBusLocations.filter((loc) => loc.busLine === busLine)];
-      });
     }
   };
 
-  const fetchBusesSequentially = async () => {
-    for (const busLine of busLines) {
-      await updateBusLocations(busLine);
-      await new Promise(resolve => setTimeout(resolve, 2000));  // 2 saniye bekle
+  const handleSelectBus = (busLine: number) => {
+    const bus = busLocations.find((location) => location.busLine === busLine);
+    if (bus) {
+      setSelectedBus(bus);
+      setSelectedBusLine(busLine.toString());
     }
-
-    // Tekrar başa dönmek için fonksiyonu çağırabiliriz
-    setTimeout(fetchBusesSequentially, 10000); // 10 saniye bekle ve tekrar başla
   };
+
+  const handleBusLineChange = (busLine: string) => {
+    setSelectedBusLine(busLine);
+    const bus = busLocations.find((location) => location.busLine === parseInt(busLine));
+    if (bus) {
+      setSelectedBus(bus);
+    }
+  };
+
+  const [selectedBusStop, setSelectedBusStop] = useState<BusStop | null>(null);
+
+  const handleBusStopSelect = useCallback((busStop: BusStop) => {
+    setSelectedBusStop(busStop);
+    if (mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: parseFloat(busStop.ENLEM),
+        longitude: parseFloat(busStop.BOYLAM),
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      }, 1000);
+    }
+  }, []);
 
   useEffect(() => {
     fetchData();
   }, []);
 
   useEffect(() => {
-    fetchBusesSequentially();
+    const updateInterval = setInterval(() => {
+      setCurrentBusLineIndex((prevIndex) => (prevIndex + 1) % busLines.length);
+    }, 5000);
+
+    return () => clearInterval(updateInterval);
   }, []);
+
+  useEffect(() => {
+    const currentBusLine = busLines[currentBusLineIndex];
+    updateBusLocations(currentBusLine);
+  }, [currentBusLineIndex]);
 
   useEffect(() => {
     if (selectedBus && mapRef.current) {
@@ -168,24 +206,71 @@ const Transportation: React.FC = () => {
     }
   }, [selectedBus]);
 
-  const handleSelectBus = (busLine: number) => {
-    const bus = busLocations.find((location) => location.busLine === busLine);
-    if (bus) {
-      setSelectedBus(bus);
+  useEffect(() => {
+    const loadBusStops = async () => {
+      try {
+        const stops = await getBusStops(selectedBusLine);
+        setBusStops(stops);
+      } catch (error) {
+        console.error('Error loading bus stops:', error);
+        // Hata durumunda boş bir dizi set et
+        setBusStops([]);
+      }
+    };
+
+    loadBusStops();
+  }, [selectedBusLine]);
+
+  const filteredBusStops = useMemo(() => {
+    if (!mapRef.current || !mapRef.current.__lastRegion) return busStops;
+    const currentRegion = mapRef.current.__lastRegion;
+
+    const latDelta = currentRegion.latitudeDelta;
+    const lonDelta = currentRegion.longitudeDelta;
+    const zoomLevel = Math.log2(360 / latDelta) - 8;
+
+    // Zoom seviyesine göre filtreleme
+    if (zoomLevel < 12) {
+      return busStops.filter((_, index) => index % 10 === 0); // Her 10. durak
+    } else if (zoomLevel < 14) {
+      return busStops.filter((_, index) => index % 5 === 0); // Her 5. durak
+    } else {
+      return busStops; // Tüm duraklar
     }
-  };
+  }, [busStops, mapRef.current]);
+
+  const renderBusStops = useCallback(() => {
+    return filteredBusStops.map((stop, index) => (
+      <Marker.Animated
+        key={`stop-${stop.DURAK_ID}`}
+        coordinate={{
+          latitude: parseFloat(stop.ENLEM),
+          longitude: parseFloat(stop.BOYLAM),
+        }}
+        title={stop.DURAK_ADI}
+        description={`Durak ID: ${stop.DURAK_ID}`}
+      >
+        <Icon name="place" size={30} color="#b71c1c" />
+      </Marker.Animated>
+    ));
+  }, [filteredBusStops]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.container}>
         <MapView
-          ref={mapRef}  // MapView referansı
+          ref={mapRef as React.RefObject<MapView>}  // MapView referansı
           style={styles.map}
           initialRegion={{
             latitude: 38.323278,
             longitude: 26.636833,
             latitudeDelta: 0.0922,
             longitudeDelta: 0.0421,
+          }}
+          onRegionChangeComplete={(region) => {
+            if (mapRef.current) {
+              (mapRef.current as ExtendedMapView).__lastRegion = region;
+            }
           }}
         >
           {busLocations.map((bus, index) => {
@@ -194,7 +279,7 @@ const Transportation: React.FC = () => {
             const busLineNumber = bus.busLine;
             return (
               <Marker
-                key={index}
+                key={`bus-${index}`}
                 coordinate={{
                   latitude: parseFloat(bus.KoorX.replace(',', '.')),
                   longitude: parseFloat(bus.KoorY.replace(',', '.')),
@@ -205,6 +290,19 @@ const Transportation: React.FC = () => {
               </Marker>
             );
           })}
+          {renderBusStops()}
+          {selectedBusStop && (
+            <Marker
+              coordinate={{
+                latitude: parseFloat(selectedBusStop.ENLEM),
+                longitude: parseFloat(selectedBusStop.BOYLAM),
+              }}
+              title={selectedBusStop.DURAK_ADI}
+              description={`Durak ID: ${selectedBusStop.DURAK_ID}`}
+            >
+              <Icon name="place" size={30} color="#b71c1c" />
+            </Marker>
+          )}
         </MapView>
 
         <BottomSheet
@@ -212,12 +310,25 @@ const Transportation: React.FC = () => {
           index={0}
           snapPoints={['4%', '50%', '90%']}
           enablePanDownToClose={false}
+          enableContentPanningGesture={false}
+          enableHandlePanningGesture={true}
+          handleStyle={styles.bottomSheetHandle}
         >
-          <TransportationDrawer
-            onClose={() => setSelectedBus(null)}
-            busLocations={busLocations}
-            onBusIconPress={handleSelectBus} // Yeni prop'u geçiyoruz
-          />
+          <View style={styles.bottomSheetContent}>
+            <FlatList
+              data={[1]}
+              keyExtractor={(item) => item.toString()}
+              renderItem={() => (
+                <TransportationDrawer
+                  busLocations={busLocations}
+                  onBusIconPress={handleSelectBus}
+                  selectedBusLine={selectedBusLine}
+                  onBusLineChange={handleBusLineChange}
+                  onBusStopSelect={handleBusStopSelect}
+                />
+              )}
+            />
+          </View>
         </BottomSheet>
 
         {selectedBus && (
@@ -316,6 +427,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
+  },
+  bottomSheetHandle: {
+    backgroundColor: '#f7f7f7',
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+  },
+  bottomSheetContent: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
 });
 
-export default Transportation;
+export default React.memo(Transportation);
