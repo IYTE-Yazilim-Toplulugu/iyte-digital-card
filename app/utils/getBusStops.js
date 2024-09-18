@@ -24,7 +24,7 @@ export const getBusStops = async (hatNo) => {
         console.log('Parsed data sample:', result.data.slice(0, 5));
 
         const uniqueStops = new Map();
-        const distanceThreshold = 70; // 10 metre eşik değeri
+        const distanceThreshold = 40; // 10 metre eşik değeri
 
         result.data.forEach(stop => {
           if (!stop.DURAKTAN_GECEN_HATLAR || !stop.ENLEM || !stop.BOYLAM) {
